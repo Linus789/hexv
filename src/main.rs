@@ -71,33 +71,6 @@ fn main() {
         space_as_hex: matches.is_present("space"),
     };
 
-    // Init fonts
-    let mut font_db = fontdb::Database::new();
-    font_db.load_system_fonts();
-
-    let query = fontdb::Query {
-        families: &[fontdb::Family::Name(settings.fontname)],
-        ..fontdb::Query::default()
-    };
-
-    let src = match font_db.query(&query) {
-        Some(id) => {
-            let (src, _) = font_db.face_source(id).unwrap();
-            src
-        }
-        None => {
-            eprintln!("Error: Font '{}' not found", settings.fontname);
-            std::process::exit(1);
-        }
-    };
-
-    let bin = match &*src {
-        fontdb::Source::Binary(bin) => std::borrow::Cow::Borrowed(bin),
-        fontdb::Source::File(path) => std::borrow::Cow::Owned(std::fs::read(path).expect("Could not read font file")),
-    };
-
-    let font = rusttype::Font::try_from_bytes(&bin).expect("Could not load font");
-
     // Lock stdout
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
@@ -122,6 +95,32 @@ fn main() {
             std::process::exit(1);
         }
 
+        // Init fonts
+        let mut font_db = fontdb::Database::new();
+        font_db.load_system_fonts();
+
+        let query = fontdb::Query {
+            families: &[fontdb::Family::Name(settings.fontname)],
+            ..fontdb::Query::default()
+        };
+
+        let src = match font_db.query(&query) {
+            Some(id) => {
+                let (src, _) = font_db.face_source(id).unwrap();
+                src
+            }
+            None => {
+                eprintln!("Error: Font '{}' not found", settings.fontname);
+                std::process::exit(1);
+            }
+        };
+
+        let bin = match &*src {
+            fontdb::Source::Binary(bin) => std::borrow::Cow::Borrowed(bin),
+            fontdb::Source::File(path) => std::borrow::Cow::Owned(std::fs::read(path).expect("Could not read font file")),
+        };
+
+        let font = rusttype::Font::try_from_bytes(&bin).expect("Could not load font");
         process_str(&mut lock, &settings, &font, str.unwrap());
     }
 
