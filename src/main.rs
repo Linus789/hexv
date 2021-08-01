@@ -91,7 +91,7 @@ fn main() {
         let str = std::str::from_utf8(&buffer);
 
         if str.is_err() {
-            eprintln!("Error: Invalid UTF-8 from stdin\nYou might want to use the following flags: -a -b");
+            eprintln!("Error: Invalid UTF-8 from stdin\nYou might want to use the following flags: --all --bytes");
             std::process::exit(1);
         }
 
