@@ -124,8 +124,8 @@ fn main() {
         process_str(&mut lock, &settings, &font, str.unwrap());
     }
 
-    // Final newline for terminal, if there is no ending newline
-    if settings.all_as_hex || settings.newline_as_hex {
+    // Final newline for terminal output, if there is no ending newline
+    if atty::is(atty::Stream::Stdout) && (settings.all_as_hex || settings.newline_as_hex) {
         writeln!(lock).unwrap();
     }
 }
