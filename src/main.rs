@@ -6,6 +6,7 @@ struct Settings<'a> {
     fontname: &'a str,
     as_bytes: bool,
     all_as_hex: bool,
+    newline_escaped: bool,
     newline_as_hex: bool,
     carriage_return_as_hex: bool,
     space_as_hex: bool,
@@ -32,9 +33,16 @@ fn main() {
                 .takes_value(false),
         )
         .arg(
-            Arg::new("newline")
+            Arg::new("newline-escaped")
                 .short('n')
-                .long("newline")
+                .long("newline-escaped")
+                .about("Print new line as \\n (takes precedence of newline-hex)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("newline-hex")
+                .short('N')
+                .long("newline-hex")
                 .about("Print new line as hex value")
                 .takes_value(false),
         )
@@ -66,7 +74,8 @@ fn main() {
         fontname: matches.value_of("fontname").unwrap(),
         as_bytes: matches.is_present("bytes"),
         all_as_hex: matches.is_present("all"),
-        newline_as_hex: matches.is_present("newline"),
+        newline_escaped: matches.is_present("newline-escaped"),
+        newline_as_hex: matches.is_present("newline-hex") && !matches.is_present("newline-escaped"),
         carriage_return_as_hex: matches.is_present("carriage-return"),
         space_as_hex: matches.is_present("space"),
     };
@@ -125,7 +134,7 @@ fn main() {
     }
 
     // Final newline for terminal output, if there is no ending newline
-    if atty::is(atty::Stream::Stdout) && (settings.all_as_hex || settings.newline_as_hex) {
+    if atty::is(atty::Stream::Stdout) && (settings.all_as_hex || settings.newline_escaped || settings.newline_as_hex) {
         writeln!(lock).unwrap();
     }
 }
@@ -135,6 +144,7 @@ fn process_str(lock: &mut StdoutLock, settings: &Settings, font: &rusttype::Font
         let glyph_available = font.glyph(char).id().0 != 0;
 
         match char {
+            c if !settings.all_as_hex && c == '\n' && settings.newline_escaped => write!(lock, "\\n").unwrap(),
             c if !settings.all_as_hex && c == '\n' && !settings.newline_as_hex => write!(lock, "{}", char).unwrap(),
             c if !settings.all_as_hex && c == '\r' && !settings.carriage_return_as_hex => write!(lock, "\\r").unwrap(),
             c if settings.all_as_hex
