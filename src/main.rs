@@ -2,14 +2,61 @@ use std::io::{Read, StdoutLock, Write};
 
 use clap::{App, Arg};
 
-struct Settings<'a> {
+struct Formatter<'a> {
+    stdout_lock: StdoutLock<'a>,
     fontname: &'a str,
     as_bytes: bool,
     all_as_hex: bool,
+    hex_as_decimal: bool,
     newline_escaped: bool,
     newline_as_hex: bool,
     carriage_return_as_hex: bool,
     space_as_hex: bool,
+}
+
+impl<'a> Formatter<'a> {
+    fn write_byte(&mut self, byte: u8) {
+        if self.hex_as_decimal {
+            write!(self.stdout_lock, "\\d{:03}", byte).unwrap();
+        } else {
+            write!(self.stdout_lock, "\\x{:02x}", byte).unwrap();
+        }
+    }
+
+    fn write_char(&mut self, char: char) {
+        if self.as_bytes {
+            for byte in char.to_string().bytes() {
+                self.write_byte(byte);
+            }
+        } else {
+            if self.hex_as_decimal {
+                write!(self.stdout_lock, "\\u{{{}}}", char as u32).unwrap();
+            } else {
+                write!(self.stdout_lock, "{}", char.escape_unicode()).unwrap();
+            }
+        }
+    }
+
+    fn process_str(&mut self, font: &rusttype::Font, str: &str) {
+        for char in str.chars() {
+            let glyph_available = font.glyph(char).id().0 != 0;
+    
+            match char {
+                c if !self.all_as_hex && c == '\n' && self.newline_escaped => write!(self.stdout_lock, "\\n").unwrap(),
+                c if !self.all_as_hex && c == '\n' && !self.newline_as_hex => write!(self.stdout_lock, "{}", char).unwrap(),
+                c if !self.all_as_hex && c == '\r' && !self.carriage_return_as_hex => write!(self.stdout_lock, "\\r").unwrap(),
+                c if self.all_as_hex
+                    || c.is_ascii_control()
+                    || (c != ' ' && c.is_whitespace())
+                    || (c == ' ' && self.space_as_hex)
+                    || (!c.is_ascii() && !glyph_available) =>
+                {
+                    self.write_char(char);
+                }
+                _ => write!(self.stdout_lock, "{}", char).unwrap(),
+            };
+        }
+    }
 }
 
 fn main() {
@@ -30,6 +77,13 @@ fn main() {
                 .short('a')
                 .long("all")
                 .about("Print everything as hex values")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("decimal")
+                .short('d')
+                .long("decimal")
+                .about("Print hex values as decimal values")
                 .takes_value(false),
         )
         .arg(
@@ -70,19 +124,19 @@ fn main() {
         )
         .get_matches();
 
-    let settings = Settings {
+    let stdout = std::io::stdout();
+
+    let mut formatter = Formatter {
+        stdout_lock: stdout.lock(),
         fontname: matches.value_of("fontname").unwrap(),
         as_bytes: matches.is_present("bytes"),
         all_as_hex: matches.is_present("all"),
+        hex_as_decimal: matches.is_present("decimal"),
         newline_escaped: matches.is_present("newline-escaped"),
         newline_as_hex: matches.is_present("newline-hex") && !matches.is_present("newline-escaped"),
         carriage_return_as_hex: matches.is_present("carriage-return"),
         space_as_hex: matches.is_present("space"),
     };
-
-    // Lock stdout
-    let stdout = std::io::stdout();
-    let mut lock = stdout.lock();
 
     // Read text from stdin
     let stdin = std::io::stdin();
@@ -91,10 +145,10 @@ fn main() {
     let mut buffer = Vec::with_capacity(256);
     stdin.read_to_end(&mut buffer).unwrap();
 
-    if settings.all_as_hex && settings.as_bytes {
+    if formatter.all_as_hex && formatter.as_bytes {
         // This option works even with invalid utf-8
         for byte in &buffer {
-            write!(lock, "\\x{:02x}", byte).unwrap();
+            formatter.write_byte(*byte);
         }
     } else {
         let str = std::str::from_utf8(&buffer);
@@ -109,7 +163,7 @@ fn main() {
         font_db.load_system_fonts();
 
         let query = fontdb::Query {
-            families: &[fontdb::Family::Name(settings.fontname)],
+            families: &[fontdb::Family::Name(formatter.fontname)],
             ..fontdb::Query::default()
         };
 
@@ -119,49 +173,24 @@ fn main() {
                 src
             }
             None => {
-                eprintln!("Error: Font '{}' not found", settings.fontname);
+                eprintln!("Error: Font '{}' not found", formatter.fontname);
                 std::process::exit(1);
             }
         };
 
         let bin = match &*src {
             fontdb::Source::Binary(bin) => std::borrow::Cow::Borrowed(bin),
-            fontdb::Source::File(path) => std::borrow::Cow::Owned(std::fs::read(path).expect("Could not read font file")),
+            fontdb::Source::File(path) => {
+                std::borrow::Cow::Owned(std::fs::read(path).expect("Could not read font file"))
+            }
         };
 
         let font = rusttype::Font::try_from_bytes(&bin).expect("Could not load font");
-        process_str(&mut lock, &settings, &font, str.unwrap());
+        formatter.process_str(&font, str.unwrap());
     }
 
     // Final newline for terminal output, if there is no ending newline
-    if atty::is(atty::Stream::Stdout) && (settings.all_as_hex || settings.newline_escaped || settings.newline_as_hex) {
-        writeln!(lock).unwrap();
-    }
-}
-
-fn process_str(lock: &mut StdoutLock, settings: &Settings, font: &rusttype::Font, str: &str) {
-    for char in str.chars() {
-        let glyph_available = font.glyph(char).id().0 != 0;
-
-        match char {
-            c if !settings.all_as_hex && c == '\n' && settings.newline_escaped => write!(lock, "\\n").unwrap(),
-            c if !settings.all_as_hex && c == '\n' && !settings.newline_as_hex => write!(lock, "{}", char).unwrap(),
-            c if !settings.all_as_hex && c == '\r' && !settings.carriage_return_as_hex => write!(lock, "\\r").unwrap(),
-            c if settings.all_as_hex
-                || c.is_ascii_control()
-                || (c != ' ' && c.is_whitespace())
-                || (c == ' ' && settings.space_as_hex)
-                || (!c.is_ascii() && !glyph_available) =>
-            {
-                if settings.as_bytes {
-                    for byte in char.to_string().bytes() {
-                        write!(lock, "\\x{:02x}", byte).unwrap();
-                    }
-                } else {
-                    write!(lock, "{}", char.escape_unicode()).unwrap();
-                }
-            }
-            _ => write!(lock, "{}", char).unwrap(),
-        };
+    if atty::is(atty::Stream::Stdout) && (formatter.all_as_hex || formatter.newline_escaped || formatter.newline_as_hex) {
+        writeln!(formatter.stdout_lock).unwrap();
     }
 }
