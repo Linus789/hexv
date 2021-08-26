@@ -37,10 +37,8 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn process_str(&mut self, font: &rusttype::Font, str: &str) {
+    fn process_str(&mut self, fonts: &[rusttype::Font], str: &str) {
         for char in str.chars() {
-            let glyph_available = font.glyph(char).id().0 != 0;
-    
             match char {
                 c if !self.all_as_hex && c == '\n' && self.newline_escaped => write!(self.stdout_lock, "\\n").unwrap(),
                 c if !self.all_as_hex && c == '\n' && !self.newline_as_hex => write!(self.stdout_lock, "{}", char).unwrap(),
@@ -49,7 +47,7 @@ impl<'a> Formatter<'a> {
                     || c.is_ascii_control()
                     || (c != ' ' && c.is_whitespace())
                     || (c == ' ' && self.space_as_hex)
-                    || (!c.is_ascii() && !glyph_available) =>
+                    || (!c.is_ascii() && !is_char_in_fonts(fonts, char)) =>
                 {
                     self.write_char(char);
                 }
@@ -57,6 +55,16 @@ impl<'a> Formatter<'a> {
             };
         }
     }
+}
+
+fn is_char_in_fonts(fonts: &[rusttype::Font], char: char) -> bool {
+    for font in fonts {
+        if font.glyph(char).id().0 != 0 {
+            return true;
+        }
+    }
+    
+    false
 }
 
 fn main() {
@@ -158,39 +166,46 @@ fn main() {
             std::process::exit(1);
         }
 
-        // Init fonts
+        // Init font database
         let mut font_db = fontdb::Database::new();
         font_db.load_system_fonts();
 
-        let query = fontdb::Query {
-            families: &[fontdb::Family::Name(formatter.fontname)],
-            ..fontdb::Query::default()
-        };
+        // Load fonts
+        let fontnames: Vec<rusttype::Font> = formatter.fontname
+            .split(",")
+            .map(|fontname| get_font(&font_db, fontname))
+            .collect();
 
-        let src = match font_db.query(&query) {
-            Some(id) => {
-                let (src, _) = font_db.face_source(id).unwrap();
-                src
-            }
-            None => {
-                eprintln!("Error: Font '{}' not found", formatter.fontname);
-                std::process::exit(1);
-            }
-        };
-
-        let bin = match &*src {
-            fontdb::Source::Binary(bin) => std::borrow::Cow::Borrowed(bin),
-            fontdb::Source::File(path) => {
-                std::borrow::Cow::Owned(std::fs::read(path).expect("Could not read font file"))
-            }
-        };
-
-        let font = rusttype::Font::try_from_bytes(&bin).expect("Could not load font");
-        formatter.process_str(&font, str.unwrap());
+        formatter.process_str(&fontnames, str.unwrap());
     }
 
     // Final newline for terminal output, if there is no ending newline
     if atty::is(atty::Stream::Stdout) && (formatter.all_as_hex || formatter.newline_escaped || formatter.newline_as_hex) {
         writeln!(formatter.stdout_lock).unwrap();
     }
+}
+
+fn get_font<'a>(font_db: &fontdb::Database, fontname: &str) -> rusttype::Font<'a> {
+    let query = fontdb::Query {
+        families: &[fontdb::Family::Name(fontname)],
+        ..fontdb::Query::default()
+    };
+
+    let src = match font_db.query(&query) {
+        Some(id) => {
+            let (src, _) = font_db.face_source(id).unwrap();
+            src
+        }
+        None => {
+            eprintln!("Error: Font '{}' not found", fontname);
+            std::process::exit(1);
+        }
+    };
+
+    let bin = match &*src {
+        fontdb::Source::Binary(bin) => bin.clone(),
+        fontdb::Source::File(path) => std::fs::read(path).expect("Could not read font file"),
+    };
+
+    rusttype::Font::try_from_vec(bin).expect("Could not load font")
 }
