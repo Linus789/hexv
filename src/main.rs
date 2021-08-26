@@ -41,12 +41,11 @@ impl<'a> Formatter<'a> {
     fn process_str(&mut self, fonts: &[rusttype::Font], str: &str) {
         for char in str.chars() {
             match char {
-                c if !self.all_as_hex && c == '\n' && self.newline_escaped => write!(self.stdout_lock, "\\n").unwrap(),
-                c if !self.all_as_hex && c == '\n' && !self.newline_as_hex => write!(self.stdout_lock, "{}", char).unwrap(),
-                c if !self.all_as_hex && c == '\r' && !self.carriage_return_as_hex => write!(self.stdout_lock, "\\r").unwrap(),
-                c if !self.all_as_hex && c == ' ' && self.space_as_circle => write!(self.stdout_lock, "🞄").unwrap(),
-                c if self.all_as_hex
-                    || c.is_ascii_control()
+                c if c == '\n' && self.newline_escaped => write!(self.stdout_lock, "\\n").unwrap(),
+                c if c == '\n' && !self.newline_as_hex => write!(self.stdout_lock, "{}", char).unwrap(),
+                c if c == '\r' && !self.carriage_return_as_hex => write!(self.stdout_lock, "\\r").unwrap(),
+                c if c == ' ' && self.space_as_circle => write!(self.stdout_lock, "🞄").unwrap(),
+                c if c.is_ascii_control()
                     || (c != ' ' && c.is_whitespace())
                     || (c == ' ' && self.space_as_hex)
                     || (!c.is_ascii() && !is_char_in_fonts(fonts, char)) =>
@@ -70,6 +69,8 @@ fn is_char_in_fonts(fonts: &[rusttype::Font], char: char) -> bool {
 }
 
 fn main() {
+    //TODO: bstr, push version
+
     // Parse args
     let matches = App::new("hexv")
         .version("0.1")
@@ -176,17 +177,25 @@ fn main() {
             std::process::exit(1);
         }
 
-        // Init font database
-        let mut font_db = fontdb::Database::new();
-        font_db.load_system_fonts();
+        let str = str.unwrap();
 
-        // Load fonts
-        let fontnames: Vec<rusttype::Font> = formatter.fontname
-            .split(",")
-            .map(|fontname| get_font(&font_db, fontname))
-            .collect();
+        if formatter.all_as_hex {
+            for char in str.chars() {
+                formatter.write_char(char);
+            }
+        } else {
+            // Init font database
+            let mut font_db = fontdb::Database::new();
+            font_db.load_system_fonts();
 
-        formatter.process_str(&fontnames, str.unwrap());
+            // Load fonts
+            let fontnames: Vec<rusttype::Font> = formatter.fontname
+                .split(",")
+                .map(|fontname| get_font(&font_db, fontname))
+                .collect();
+
+            formatter.process_str(&fontnames, str);
+        }
     }
 
     // Final newline for terminal output, if there is no ending newline
