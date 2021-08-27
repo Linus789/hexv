@@ -74,7 +74,7 @@ fn main() {
 
     // Parse args
     let matches = App::new("hexv")
-        .version("0.1")
+        .version("0.2.0")
         .author("Linus789")
         .about("View text with hex values")
         .arg(
