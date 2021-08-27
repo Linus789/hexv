@@ -1,5 +1,6 @@
 use std::io::{Read, StdoutLock, Write};
 
+use ab_glyph::Font;
 use clap::{App, Arg};
 
 struct Formatter<'a> {
@@ -38,7 +39,7 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn process_str(&mut self, fonts: &[rusttype::Font], str: &str) {
+    fn process_str(&mut self, fonts: &[ab_glyph::FontVec], str: &str) {
         for char in str.chars() {
             match char {
                 c if c == '\n' && self.newline_escaped => write!(self.stdout_lock, "\\n").unwrap(),
@@ -58,13 +59,13 @@ impl<'a> Formatter<'a> {
     }
 }
 
-fn is_char_in_fonts(fonts: &[rusttype::Font], char: char) -> bool {
+fn is_char_in_fonts(fonts: &[ab_glyph::FontVec], char: char) -> bool {
     for font in fonts {
-        if font.glyph(char).id().0 != 0 {
+        if font.glyph_id(char).0 != 0 {
             return true;
         }
     }
-    
+
     false
 }
 
@@ -189,7 +190,8 @@ fn main() {
             font_db.load_system_fonts();
 
             // Load fonts
-            let fontnames: Vec<rusttype::Font> = formatter.fontname
+            let fontnames: Vec<ab_glyph::FontVec> = formatter
+                .fontname
                 .split(",")
                 .map(|fontname| get_font(&font_db, fontname))
                 .collect();
@@ -204,7 +206,7 @@ fn main() {
     }
 }
 
-fn get_font<'a>(font_db: &fontdb::Database, fontname: &str) -> rusttype::Font<'a> {
+fn get_font(font_db: &fontdb::Database, fontname: &str) -> ab_glyph::FontVec {
     let query = fontdb::Query {
         families: &[fontdb::Family::Name(fontname)],
         ..fontdb::Query::default()
@@ -226,5 +228,5 @@ fn get_font<'a>(font_db: &fontdb::Database, fontname: &str) -> rusttype::Font<'a
         fontdb::Source::File(path) => std::fs::read(path).expect("Could not read font file"),
     };
 
-    rusttype::Font::try_from_vec(bin).expect("Could not load font")
+    ab_glyph::FontVec::try_from_vec(bin).expect("Could not load font")
 }
