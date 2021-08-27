@@ -1,6 +1,7 @@
 use std::io::{Read, StdoutLock, Write};
 
 use ab_glyph::Font;
+use bstr::ByteSlice;
 use clap::{App, Arg};
 
 struct Formatter<'a> {
@@ -39,8 +40,25 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn process_str(&mut self, fonts: &[ab_glyph::FontVec], str: &str) {
-        for char in str.chars() {
+    fn process_str(&mut self, fonts: &[ab_glyph::FontVec], buffer: &[u8]) {
+        for (start, end, char) in buffer.char_indices() {
+            let char_as_string = char.to_string();
+            let original_bytes = &buffer[start..end];
+            let new_bytes = char_as_string.as_bytes();
+
+            if original_bytes != new_bytes {
+                for byte in original_bytes {
+                    self.write_byte(*byte);
+                }
+
+                continue;
+            }
+
+            if self.all_as_hex {
+                self.write_char(char);
+                continue;
+            }
+
             match char {
                 c if c == '\n' && self.newline_escaped => write!(self.stdout_lock, "\\n").unwrap(),
                 c if c == '\n' && !self.newline_as_hex => write!(self.stdout_lock, "{}", char).unwrap(),
@@ -70,8 +88,6 @@ fn is_char_in_fonts(fonts: &[ab_glyph::FontVec], char: char) -> bool {
 }
 
 fn main() {
-    //TODO: bstr, push version
-
     // Parse args
     let matches = App::new("hexv")
         .version("0.2.0")
@@ -166,38 +182,22 @@ fn main() {
     stdin.read_to_end(&mut buffer).unwrap();
 
     if formatter.all_as_hex && formatter.as_bytes {
-        // This option works even with invalid utf-8
         for byte in &buffer {
             formatter.write_byte(*byte);
         }
     } else {
-        let str = std::str::from_utf8(&buffer);
+        // Init font database
+        let mut font_db = fontdb::Database::new();
+        font_db.load_system_fonts();
 
-        if str.is_err() {
-            eprintln!("Error: Invalid UTF-8 from stdin\nYou might want to use the following flags: --all --bytes");
-            std::process::exit(1);
-        }
+        // Load fonts
+        let fontnames: Vec<ab_glyph::FontVec> = formatter
+            .fontname
+            .split(",")
+            .map(|fontname| get_font(&font_db, fontname))
+            .collect();
 
-        let str = str.unwrap();
-
-        if formatter.all_as_hex {
-            for char in str.chars() {
-                formatter.write_char(char);
-            }
-        } else {
-            // Init font database
-            let mut font_db = fontdb::Database::new();
-            font_db.load_system_fonts();
-
-            // Load fonts
-            let fontnames: Vec<ab_glyph::FontVec> = formatter
-                .fontname
-                .split(",")
-                .map(|fontname| get_font(&font_db, fontname))
-                .collect();
-
-            formatter.process_str(&fontnames, str);
-        }
+        formatter.process_str(&fontnames, &buffer);
     }
 
     // Final newline for terminal output, if there is no ending newline
