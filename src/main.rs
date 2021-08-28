@@ -90,7 +90,7 @@ fn is_char_in_fonts(fonts: &[ab_glyph::FontVec], char: char) -> bool {
 fn main() {
     // Parse args
     let matches = App::new("hexv")
-        .version("0.3.0")
+        .version("0.3.1")
         .author("Linus789")
         .about("View text with hex values")
         .arg(
