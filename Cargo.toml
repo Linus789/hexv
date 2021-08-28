@@ -4,8 +4,8 @@ version = "0.3.0"
 edition = "2018"
 
 [dependencies]
-clap = "3.0.0-beta.2"
+clap = "3.0.0-beta.4"
 bstr = "0.2.16"
 ab_glyph = "0.2.11"
-fontdb = "0.5.4"
+fontdb = "0.6.0"
 atty = "0.2.14"
