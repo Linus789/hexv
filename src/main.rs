@@ -31,12 +31,10 @@ impl<'a> Formatter<'a> {
             for byte in char.to_string().bytes() {
                 self.write_byte(byte);
             }
+        } else if self.hex_as_decimal {
+            write!(self.stdout_lock, "\\u{{{}}}", char as u32).unwrap();
         } else {
-            if self.hex_as_decimal {
-                write!(self.stdout_lock, "\\u{{{}}}", char as u32).unwrap();
-            } else {
-                write!(self.stdout_lock, "{}", char.escape_unicode()).unwrap();
-            }
+            write!(self.stdout_lock, "{}", char.escape_unicode()).unwrap();
         }
     }
 
@@ -193,7 +191,7 @@ fn main() {
         // Load fonts
         let fontnames: Vec<ab_glyph::FontVec> = formatter
             .fontname
-            .split(",")
+            .split(',')
             .map(|fontname| get_font(&font_db, fontname))
             .collect();
 
