@@ -13,6 +13,7 @@ struct Formatter<'a> {
     newline_escaped: bool,
     newline_as_hex: bool,
     carriage_return_as_hex: bool,
+    tab_as_hex: bool,
     space_as_circle: bool,
     space_as_hex: bool,
 }
@@ -61,6 +62,7 @@ impl<'a> Formatter<'a> {
                 c if c == '\n' && self.newline_escaped => write!(self.stdout_lock, "\\n").unwrap(),
                 c if c == '\n' && !self.newline_as_hex => write!(self.stdout_lock, "{}", char).unwrap(),
                 c if c == '\r' && !self.carriage_return_as_hex => write!(self.stdout_lock, "\\r").unwrap(),
+                c if c == '\t' && !self.tab_as_hex => write!(self.stdout_lock, "\\t").unwrap(),
                 c if c == ' ' && self.space_as_circle => write!(self.stdout_lock, "🞄").unwrap(),
                 c if c.is_ascii_control()
                     || (c != ' ' && c.is_whitespace())
@@ -134,6 +136,13 @@ fn main() {
                 .takes_value(false),
         )
         .arg(
+            Arg::new("tab-hex")
+                .short('t')
+                .long("tab-hex")
+                .about("Print tab as hex value instead of \\t")
+                .takes_value(false),
+        )
+        .arg(
             Arg::new("space-circle")
                 .short('s')
                 .long("space-circle")
@@ -168,6 +177,7 @@ fn main() {
         newline_escaped: matches.is_present("newline-escaped"),
         newline_as_hex: matches.is_present("newline-hex") && !matches.is_present("newline-escaped"),
         carriage_return_as_hex: matches.is_present("carriage-return"),
+        tab_as_hex: matches.is_present("tab-hex"),
         space_as_circle: matches.is_present("space-circle"),
         space_as_hex: matches.is_present("space-hex") && !matches.is_present("space-circle"),
     };
