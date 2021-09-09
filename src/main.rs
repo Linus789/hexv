@@ -6,7 +6,7 @@ use clap::{App, Arg};
 
 struct Formatter<'a> {
     stdout_lock: StdoutLock<'a>,
-    fontname: &'a str,
+    fontnames: &'a str,
     as_bytes: bool,
     all_as_hex: bool,
     hex_as_decimal: bool,
@@ -88,9 +88,9 @@ fn is_char_in_fonts(fonts: &[ab_glyph::FontVec], char: char) -> bool {
 fn main() {
     // Parse args
     let matches = App::new("hexv")
-        .version("0.3.1")
-        .author("Linus789")
-        .about("View text with hex values")
+        .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
         .arg(
             Arg::new("bytes")
                 .short('b')
@@ -161,7 +161,7 @@ fn main() {
 
     let mut formatter = Formatter {
         stdout_lock: stdout.lock(),
-        fontname: matches.value_of("fontname").unwrap(),
+        fontnames: matches.value_of("fontname").unwrap(),
         as_bytes: matches.is_present("bytes"),
         all_as_hex: matches.is_present("all"),
         hex_as_decimal: matches.is_present("decimal"),
@@ -189,13 +189,13 @@ fn main() {
         font_db.load_system_fonts();
 
         // Load fonts
-        let fontnames: Vec<ab_glyph::FontVec> = formatter
-            .fontname
+        let fonts: Vec<ab_glyph::FontVec> = formatter
+            .fontnames
             .split(',')
             .map(|fontname| get_font(&font_db, fontname))
             .collect();
 
-        formatter.process_str(&fontnames, &buffer);
+        formatter.process_str(&fonts, &buffer);
     }
 
     // Final newline for terminal output, if there is no ending newline
