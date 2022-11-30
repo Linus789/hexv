@@ -97,70 +97,70 @@ fn main() {
             Arg::new("bytes")
                 .short('b')
                 .long("bytes")
-                .about("Show bytes instead of unicode values")
+                .help("Show bytes instead of unicode values")
                 .takes_value(false),
         )
         .arg(
             Arg::new("all")
                 .short('a')
                 .long("all")
-                .about("Print everything as hex values")
+                .help("Print everything as hex values")
                 .takes_value(false),
         )
         .arg(
             Arg::new("decimal")
                 .short('d')
                 .long("decimal")
-                .about("Print hex values as decimal values")
+                .help("Print hex values as decimal values")
                 .takes_value(false),
         )
         .arg(
             Arg::new("newline-escaped")
                 .short('n')
                 .long("newline-escaped")
-                .about("Print new line as \\n (takes precedence of newline-hex)")
+                .help("Print new line as \\n (takes precedence of newline-hex)")
                 .takes_value(false),
         )
         .arg(
             Arg::new("newline-hex")
                 .short('N')
                 .long("newline-hex")
-                .about("Print new line as hex value")
+                .help("Print new line as hex value")
                 .takes_value(false),
         )
         .arg(
             Arg::new("carriage-return")
                 .short('r')
                 .long("carriage-return")
-                .about("Print carriage return as hex value instead of \\r")
+                .help("Print carriage return as hex value instead of \\r")
                 .takes_value(false),
         )
         .arg(
             Arg::new("tab-hex")
                 .short('t')
                 .long("tab-hex")
-                .about("Print tab as hex value instead of \\t")
+                .help("Print tab as hex value instead of \\t")
                 .takes_value(false),
         )
         .arg(
             Arg::new("space-circle")
                 .short('s')
                 .long("space-circle")
-                .about("Print space as circle (🞄) (takes precedence of space-hex)")
+                .help("Print space as circle (🞄) (takes precedence of space-hex)")
                 .takes_value(false),
         )
         .arg(
             Arg::new("space-hex")
                 .short('S')
                 .long("space-hex")
-                .about("Print space as hex value")
+                .help("Print space as hex value")
                 .takes_value(false),
         )
         .arg(
             Arg::new("fontname")
                 .short('f')
                 .long("fontname")
-                .about("Sets the font to check whether a glyph is present")
+                .help("Sets the font to check whether a glyph is present")
                 .required(true)
                 .takes_value(true),
         )
