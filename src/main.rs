@@ -1,5 +1,5 @@
 use std::{
-    io::{IsTerminal, Read, StdoutLock, Write},
+    io::{BufRead, IsTerminal, Read, StdoutLock, Write},
     ops::Deref,
 };
 
@@ -169,6 +169,13 @@ fn main() {
                 .help("Sets the font to check whether a glyph is present")
                 .required(true),
         )
+        .arg(
+            arg!(
+                -l --"line-by-line" "Read lines by line"
+            )
+            .required(false)
+            .action(ArgAction::SetTrue),
+        )
         .get_matches();
 
     let stdout = std::io::stdout();
@@ -186,17 +193,35 @@ fn main() {
         space_as_circle: matches.get_flag("space-circle"),
         space_as_hex: matches.get_flag("space-hex") && !matches.get_flag("space-circle"),
     };
+    let line_by_line = matches.get_flag("line-by-line");
 
-    // Read text from stdin
+    // Prepare to read text from stdin
     let stdin = std::io::stdin();
     let mut stdin = stdin.lock();
-
     let mut buffer = Vec::with_capacity(256);
-    stdin.read_to_end(&mut buffer).unwrap();
 
     if formatter.all_as_hex && formatter.as_bytes {
-        for byte in &buffer {
-            formatter.write_byte(*byte);
+        if line_by_line {
+            loop {
+                let read = stdin.read_until(b'\n', &mut buffer).unwrap();
+
+                if read == 0 {
+                    break;
+                }
+
+                for byte in &buffer[..read] {
+                    formatter.write_byte(*byte);
+                }
+
+                formatter.stdout_lock.flush().unwrap();
+                buffer.clear();
+            }
+        } else {
+            stdin.read_to_end(&mut buffer).unwrap();
+
+            for byte in &buffer {
+                formatter.write_byte(*byte);
+            }
         }
     } else {
         // Init font database
@@ -215,7 +240,22 @@ fn main() {
             fonts.push(load_font(src));
         }
 
-        formatter.process_str(&fonts, &buffer);
+        if line_by_line {
+            loop {
+                let read = stdin.read_until(b'\n', &mut buffer).unwrap();
+
+                if read == 0 {
+                    break;
+                }
+
+                formatter.process_str(&fonts, &buffer[..read]);
+                formatter.stdout_lock.flush().unwrap();
+                buffer.clear();
+            }
+        } else {
+            stdin.read_to_end(&mut buffer).unwrap();
+            formatter.process_str(&fonts, &buffer);
+        }
     }
 
     // Final newline for terminal output, if there is no ending newline
@@ -226,6 +266,7 @@ fn main() {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum FontCow<'a> {
     FontVec(ab_glyph::FontVec),
     FontRef(ab_glyph::FontRef<'a>),
@@ -258,7 +299,7 @@ fn get_font_source(font_db: &fontdb::Database, fontname: &str) -> fontdb::Source
     }
 }
 
-fn load_font<'a>(font_source: &'a fontdb::Source) -> FontCow<'a> {
+fn load_font(font_source: &fontdb::Source) -> FontCow<'_> {
     match font_source {
         fontdb::Source::Binary(bin) | fontdb::Source::SharedFile(_, bin) => {
             FontCow::FontRef(ab_glyph::FontRef::try_from_slice(bin.deref().as_ref()).expect("Could not load font"))
