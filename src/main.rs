@@ -1,8 +1,11 @@
-use std::io::{Read, StdoutLock, Write};
+use std::{
+    io::{IsTerminal, Read, StdoutLock, Write},
+    ops::Deref,
+};
 
 use ab_glyph::Font;
 use bstr::ByteSlice;
-use clap::{App, Arg};
+use clap::{arg, crate_authors, crate_description, crate_name, crate_version, Arg, ArgAction, Command};
 
 struct Formatter<'a> {
     stdout_lock: StdoutLock<'a>,
@@ -39,7 +42,7 @@ impl<'a> Formatter<'a> {
         }
     }
 
-    fn process_str(&mut self, fonts: &[ab_glyph::FontVec], buffer: &[u8]) {
+    fn process_str(&mut self, fonts: &[FontCow], buffer: &[u8]) {
         for (start, end, char) in buffer.char_indices() {
             let char_as_string = char.to_string();
             let original_bytes = &buffer[start..end];
@@ -77,7 +80,7 @@ impl<'a> Formatter<'a> {
     }
 }
 
-fn is_char_in_fonts(fonts: &[ab_glyph::FontVec], char: char) -> bool {
+fn is_char_in_fonts(fonts: &[FontCow], char: char) -> bool {
     for font in fonts {
         if font.glyph_id(char).0 != 0 {
             return true;
@@ -89,80 +92,82 @@ fn is_char_in_fonts(fonts: &[ab_glyph::FontVec], char: char) -> bool {
 
 fn main() {
     // Parse args
-    let matches = App::new("hexv")
-        .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS"))
-        .about(env!("CARGO_PKG_DESCRIPTION"))
+    let matches = Command::new(crate_name!())
+        .version(crate_version!())
+        .author(crate_authors!())
+        .about(crate_description!())
         .arg(
-            Arg::new("bytes")
-                .short('b')
-                .long("bytes")
-                .help("Show bytes instead of unicode values")
-                .takes_value(false),
+            arg!(
+                -b --"bytes" "Show bytes instead of unicode values"
+            )
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("all")
-                .short('a')
-                .long("all")
-                .help("Print everything as hex values")
-                .takes_value(false),
+            arg!(
+                -a --"all" "Print everything as hex values"
+            )
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("decimal")
-                .short('d')
-                .long("decimal")
-                .help("Print hex values as decimal values")
-                .takes_value(false),
+            arg!(
+                -d --"decimal" "Print hex values as decimal values"
+            )
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("newline-escaped")
-                .short('n')
-                .long("newline-escaped")
-                .help("Print new line as \\n (takes precedence of newline-hex)")
-                .takes_value(false),
+            arg!(
+                -n --"newline-escaped" "Print new line as \\n"
+            )
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("newline-hex")
-                .short('N')
-                .long("newline-hex")
-                .help("Print new line as hex value")
-                .takes_value(false),
+            arg!(
+                -N --"newline-hex" "Print new line as hex value"
+            )
+            .conflicts_with("newline-escaped")
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("carriage-return")
-                .short('r')
-                .long("carriage-return")
-                .help("Print carriage return as hex value instead of \\r")
-                .takes_value(false),
+            arg!(
+                -r --"carriage-return-hex" "Print carriage return as hex value instead of \\r"
+            )
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("tab-hex")
-                .short('t')
-                .long("tab-hex")
-                .help("Print tab as hex value instead of \\t")
-                .takes_value(false),
+            arg!(
+                -t --"tab-hex" "Print tab as hex value instead of \\t"
+            )
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("space-circle")
-                .short('s')
-                .long("space-circle")
-                .help("Print space as circle (🞄) (takes precedence of space-hex)")
-                .takes_value(false),
+            arg!(
+                -s --"space-circle" "Print space as circle (🞄)"
+            )
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("space-hex")
-                .short('S')
-                .long("space-hex")
-                .help("Print space as hex value")
-                .takes_value(false),
+            arg!(
+                -S --"space-hex" "Print space as hex value"
+            )
+            .conflicts_with("space-circle")
+            .required(false)
+            .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("fontname")
                 .short('f')
                 .long("fontname")
+                .value_name("FONT1[,FONT2,...]")
                 .help("Sets the font to check whether a glyph is present")
-                .required(true)
-                .takes_value(true),
+                .required(true),
         )
         .get_matches();
 
@@ -170,16 +175,16 @@ fn main() {
 
     let mut formatter = Formatter {
         stdout_lock: stdout.lock(),
-        fontnames: matches.value_of("fontname").unwrap(),
-        as_bytes: matches.is_present("bytes"),
-        all_as_hex: matches.is_present("all"),
-        hex_as_decimal: matches.is_present("decimal"),
-        newline_escaped: matches.is_present("newline-escaped"),
-        newline_as_hex: matches.is_present("newline-hex") && !matches.is_present("newline-escaped"),
-        carriage_return_as_hex: matches.is_present("carriage-return"),
-        tab_as_hex: matches.is_present("tab-hex"),
-        space_as_circle: matches.is_present("space-circle"),
-        space_as_hex: matches.is_present("space-hex") && !matches.is_present("space-circle"),
+        fontnames: matches.get_one::<String>("fontname").unwrap(),
+        as_bytes: matches.get_flag("bytes"),
+        all_as_hex: matches.get_flag("all"),
+        hex_as_decimal: matches.get_flag("decimal"),
+        newline_escaped: matches.get_flag("newline-escaped"),
+        newline_as_hex: matches.get_flag("newline-hex") && !matches.get_flag("newline-escaped"),
+        carriage_return_as_hex: matches.get_flag("carriage-return-hex"),
+        tab_as_hex: matches.get_flag("tab-hex"),
+        space_as_circle: matches.get_flag("space-circle"),
+        space_as_hex: matches.get_flag("space-hex") && !matches.get_flag("space-circle"),
     };
 
     // Read text from stdin
@@ -199,28 +204,49 @@ fn main() {
         font_db.load_system_fonts();
 
         // Load fonts
-        let fonts: Vec<ab_glyph::FontVec> = formatter
+        let font_sources: Vec<_> = formatter
             .fontnames
             .split(',')
-            .map(|fontname| get_font(&font_db, fontname))
+            .map(|fontname| get_font_source(&font_db, fontname))
             .collect();
+
+        let mut fonts = Vec::with_capacity(font_sources.len());
+        for src in &font_sources {
+            fonts.push(load_font(src));
+        }
 
         formatter.process_str(&fonts, &buffer);
     }
 
     // Final newline for terminal output, if there is no ending newline
-    if atty::is(atty::Stream::Stdout) && (formatter.all_as_hex || formatter.newline_escaped || formatter.newline_as_hex) {
+    if formatter.stdout_lock.is_terminal()
+        && (formatter.all_as_hex || formatter.newline_escaped || formatter.newline_as_hex)
+    {
         writeln!(formatter.stdout_lock).unwrap();
     }
 }
 
-fn get_font(font_db: &fontdb::Database, fontname: &str) -> ab_glyph::FontVec {
+enum FontCow<'a> {
+    FontVec(ab_glyph::FontVec),
+    FontRef(ab_glyph::FontRef<'a>),
+}
+
+impl FontCow<'_> {
+    fn glyph_id(&self, c: char) -> ab_glyph::GlyphId {
+        match self {
+            FontCow::FontVec(f) => f.glyph_id(c),
+            FontCow::FontRef(f) => f.glyph_id(c),
+        }
+    }
+}
+
+fn get_font_source(font_db: &fontdb::Database, fontname: &str) -> fontdb::Source {
     let query = fontdb::Query {
         families: &[fontdb::Family::Name(fontname)],
         ..fontdb::Query::default()
     };
 
-    let src = match font_db.query(&query) {
+    match font_db.query(&query) {
         Some(id) => {
             let (src, _) = font_db.face_source(id).unwrap();
             src
@@ -229,12 +255,17 @@ fn get_font(font_db: &fontdb::Database, fontname: &str) -> ab_glyph::FontVec {
             eprintln!("Error: Font '{}' not found", fontname);
             std::process::exit(1);
         }
-    };
+    }
+}
 
-    let bin = match &*src {
-        fontdb::Source::Binary(bin) => bin.clone(),
-        fontdb::Source::File(path) => std::fs::read(path).expect("Could not read font file"),
-    };
-
-    ab_glyph::FontVec::try_from_vec(bin).expect("Could not load font")
+fn load_font<'a>(font_source: &'a fontdb::Source) -> FontCow<'a> {
+    match font_source {
+        fontdb::Source::Binary(bin) | fontdb::Source::SharedFile(_, bin) => {
+            FontCow::FontRef(ab_glyph::FontRef::try_from_slice(bin.deref().as_ref()).expect("Could not load font"))
+        }
+        fontdb::Source::File(path) => FontCow::FontVec(
+            ab_glyph::FontVec::try_from_vec(std::fs::read(path).expect("Could not read font file"))
+                .expect("Could not load font"),
+        ),
+    }
 }
